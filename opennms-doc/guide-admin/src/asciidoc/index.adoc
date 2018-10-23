@@ -136,6 +136,7 @@ include::text/service-assurance/monitors/TcpMonitor.adoc[]
 include::text/service-assurance/monitors/SystemExecuteMonitor.adoc[]
 include::text/service-assurance/monitors/VmwareCimMonitor.adoc[]
 include::text/service-assurance/monitors/VmwareMonitor.adoc[]
+include::text/service-assurance/monitors/WebMonitor.adoc[]
 include::text/service-assurance/monitors/Win32ServiceMonitor.adoc[]
 include::text/service-assurance/monitors/WsManMonitor.adoc[]
 include::text/service-assurance/monitors/XmpMonitor.adoc[]
@@ -311,6 +312,7 @@ ifndef::opennms-prime[]
 == Minion
 include::text/minion/kafka.adoc[]
 include::text/minion/aws-sqs.adoc[]
+include::text/minion/offheap.adoc[]
 endif::opennms-prime[]
 
 [[ga-sentinel]]
@@ -374,6 +376,7 @@ include::text/elasticsearch/features/alarm-event-forwarder.adoc[]
 include::text/elasticsearch/features/alarm-event-forwarder-mapping.adoc[]
 include::text/elasticsearch/features/alarm-event-forwarder-mapping-table.adoc[]
 include::text/elasticsearch/features/flows.adoc[]
+include::text/elasticsearch/features/situation-feedback.adoc[]
 
 [[ga-flow-support]]
 == Flow Support
@@ -384,3 +387,7 @@ include::text/flows/classification-engine.adoc[]
 [[ga-kafka-producer]]
 == Kafka Producer
 include::text/kafka-producer/kafka-producer.adoc[]
+
+[[ga-alarm-correlation]]
+== Alarm Correlation
+include::text/alarm-correlation/situation-feedback.adoc[]
