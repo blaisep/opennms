@@ -36,13 +36,16 @@ import static org.hamcrest.collection.IsIterableContainingInOrder.contains;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
-import static org.opennms.netmgt.alarmd.driver.AlarmMatchers.hasSeverity;
+import static org.opennms.netmgt.alarmd.AlarmMatchers.hasSeverity;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Date;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -52,6 +55,7 @@ import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.opennms.core.test.OpenNMSJUnit4ClassRunner;
+import org.opennms.netmgt.dao.api.AcknowledgmentDao;
 import org.opennms.netmgt.dao.api.AlarmDao;
 import org.opennms.netmgt.dao.support.AlarmEntityNotifierImpl;
 import org.opennms.netmgt.model.OnmsAlarm;
@@ -63,6 +67,8 @@ import org.opennms.test.JUnitConfigurationEnvironment;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.test.context.ContextConfiguration;
+
+import com.google.common.collect.Sets;
 
 /**
  * Used to isolate and trigger specific Drools rules in the default ruleset for Alarmd.
@@ -79,6 +85,8 @@ public class DroolsAlarmContextIT {
 
     private DroolsAlarmContext dac;
     private AlarmDao alarmDao;
+    private AcknowledgmentDao acknowledgmentDao;
+
     private MockTicketer ticketer = new MockTicketer();
 
     @Before
@@ -91,10 +99,13 @@ public class DroolsAlarmContextIT {
         DefaultAlarmService alarmService = new DefaultAlarmService();
         alarmDao = mock(AlarmDao.class);
         alarmService.setAlarmDao(alarmDao);
+        acknowledgmentDao = mock(AcknowledgmentDao.class);
+        alarmService.setAcknowledgmentDao(acknowledgmentDao);
 
         AlarmEntityNotifierImpl alarmEntityNotifier = mock(AlarmEntityNotifierImpl.class);
         alarmService.setAlarmEntityNotifier(alarmEntityNotifier);
         dac.setAlarmService(alarmService);
+        dac.setAcknowledgmentDao(acknowledgmentDao);
 
         dac.start();
     }
@@ -491,6 +502,50 @@ public class DroolsAlarmContextIT {
 
         // The trigger should be cleared
         assertThat(trigger, hasSeverity(OnmsSeverity.CLEARED));
+    }
+
+    @Test
+    public void canDeleteRelatedAlarm() {
+        OnmsAlarm alarm1 = new OnmsAlarm();
+        alarm1.setId(1);
+        alarm1.setAlarmType(1);
+        alarm1.setSeverity(OnmsSeverity.WARNING);
+        alarm1.setReductionKey("n1:oops1");
+        alarm1.setLastEventTime(new Date(1000));
+        OnmsAlarm alarm2 = new OnmsAlarm();
+        alarm2.setId(2);
+        alarm2.setAlarmType(1);
+        alarm2.setSeverity(OnmsSeverity.WARNING);
+        alarm2.setReductionKey("n1:oops2");
+        alarm2.setLastEventTime(new Date(1000));
+        OnmsAlarm situation = new OnmsAlarm();
+        situation.setId(3);
+        situation.setAlarmType(1);
+        situation.setSeverity(OnmsSeverity.WARNING);
+        situation.setReductionKey("n1:situation");
+        situation.setLastEventTime(new Date(2000));
+        situation.setRelatedAlarms(Sets.newHashSet(alarm1, alarm2));
+
+        when(alarmDao.get(alarm1.getId())).thenReturn(alarm1);
+        when(alarmDao.get(alarm2.getId())).thenReturn(alarm2);
+        when(alarmDao.get(situation.getId())).thenReturn(situation);
+        dac.getClock().advanceTime(1000, TimeUnit.MILLISECONDS);
+        dac.handleNewOrUpdatedAlarm(alarm1);
+        dac.handleNewOrUpdatedAlarm(alarm2);
+        dac.tick();
+
+        dac.getClock().advanceTime(1000, TimeUnit.MILLISECONDS);
+        dac.handleNewOrUpdatedAlarm(situation);
+        dac.tick();
+
+        // Now remove the 2nd alarm from the situation
+        situation.setLastEventTime(new Date(3000));
+        situation.setRelatedAlarms(Sets.newHashSet(alarm1));
+
+        dac.getClock().advanceTime(1000, TimeUnit.MILLISECONDS);
+        dac.handleNewOrUpdatedAlarm(situation);
+        dac.tick();
+
     }
 
     private void printAlarmDetails(OnmsAlarm alarm) {

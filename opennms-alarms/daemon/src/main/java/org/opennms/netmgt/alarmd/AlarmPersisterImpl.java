@@ -288,15 +288,26 @@ public class AlarmPersisterImpl implements AlarmPersister {
             }
         }
 
-        Set<OnmsAlarm> relatedAlarms = getRelatedAlarms(event.getParmCollection());
-        if (relatedAlarms != null && !relatedAlarms.isEmpty()) {
-            // alarm.relatedAlarms becomes the union of any existing alarms and any in the event.
-            for (OnmsAlarm related : relatedAlarms) {
-                alarm.addRelatedAlarm(related);
-            }
-        }
+        updateRelatedAlarms(alarm, event);
 
         persistedEvent.setAlarm(alarm);
+    }
+    
+    private void updateRelatedAlarms(OnmsAlarm alarm, Event event) {
+        // Clear the existing related alarms that may be known for this alarm so that we treat the event as an
+        // authoritative source of the related alarms rather than using the union of the previously known related alarms
+        // and the event's related alarms
+        alarm.setRelatedAlarms(Collections.emptySet());
+
+        // Rebuild the related alarm list from this event
+        getRelatedAlarms(event.getParmCollection()).forEach(relatedAlarm -> {
+            if (!formingCyclicGraph(alarm, relatedAlarm)) {
+                alarm.addRelatedAlarm(relatedAlarm);
+            } else {
+                LOG.warn("Alarm with id '{}' , reductionKey '{}' is not added as related alarm for id '{}' as it is " +
+                        "forming cyclic graph ", relatedAlarm.getId(), relatedAlarm.getReductionKey(), alarm.getId());
+            }
+        });
     }
 
     private void resetAlarmSeverity(OnmsEvent persistedEvent, OnmsAlarm alarm) {
@@ -318,7 +329,7 @@ public class AlarmPersisterImpl implements AlarmPersister {
     private OnmsAlarm createNewAlarm(OnmsEvent e, Event event) {
         OnmsAlarm alarm = new OnmsAlarm();
         // Situations are denoted by the existance of related-reductionKeys
-        alarm.setRelatedAlarms(getRelatedAlarms(event.getParmCollection()));
+        alarm.setRelatedAlarms(getRelatedAlarms(event.getParmCollection()), event.getTime());
         alarm.setAlarmType(event.getAlarmData().getAlarmType());
         alarm.setClearKey(event.getAlarmData().getClearKey());
         alarm.setCounter(1);
@@ -331,7 +342,7 @@ public class AlarmPersisterImpl implements AlarmPersister {
         alarm.setLastEvent(e);
         alarm.setLogMsg(e.getEventLogMsg());
         alarm.setMouseOverText(e.getEventMouseOverText());
-        alarm.setNode(e.getNode()); 
+        alarm.setNode(e.getNode());
         alarm.setOperInstruct(e.getEventOperInstruct());
         alarm.setReductionKey(event.getAlarmData().getReductionKey());
         alarm.setServiceType(e.getServiceType());
@@ -344,6 +355,12 @@ public class AlarmPersisterImpl implements AlarmPersister {
         }
         e.setAlarm(alarm);
         return alarm;
+    }
+
+    private boolean formingCyclicGraph(OnmsAlarm situation, OnmsAlarm relatedAlarm) {
+
+        return situation.getReductionKey().equals(relatedAlarm.getReductionKey()) ||
+                relatedAlarm.getRelatedAlarms().stream().anyMatch(ra -> formingCyclicGraph(situation, ra));
     }
     
     private Set<OnmsAlarm> getRelatedAlarms(List<Parm> list) {
